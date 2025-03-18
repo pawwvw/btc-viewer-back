@@ -1,26 +1,54 @@
 import { Injectable } from '@nestjs/common';
-import { CreatePriceFetcherDto } from './dto/create-price-fetcher.dto';
-import { UpdatePriceFetcherDto } from './dto/update-price-fetcher.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { PriceFetcher } from './entities/price-fetcher.entity';
+import { Between, Repository } from 'typeorm';
+import axios from 'axios';
+import { Cron, CronExpression } from '@nestjs/schedule';
+
+
+export interface CoinDeskResponse {
+  data: {
+    Data: {
+      'BTC-USD': {
+        PRICE: number;
+      };
+    };
+  }
+}
 
 @Injectable()
 export class PriceFetcherService {
-  create(createPriceFetcherDto: CreatePriceFetcherDto) {
-    return 'This action adds a new priceFetcher';
+  constructor (
+    @InjectRepository(PriceFetcher)
+    private readonly priceFetcherRepository: Repository<PriceFetcher> 
+  ){}
+
+  @Cron(CronExpression.EVERY_10_SECONDS)
+  async savePrice(): Promise<PriceFetcher> {
+    const price = await this.fetchCurrentPrice()
+    const newPrice = this.priceFetcherRepository.create({price})
+    return await this.priceFetcherRepository.save(newPrice)
   }
 
-  findAll() {
-    return `This action returns all priceFetcher`;
-  }
+  async getPrices(startDate?: string, endDate?: string): Promise<PriceFetcher[]>{
+    if (startDate && endDate) {
+      return await this.priceFetcherRepository.find({
+        where: {
+          timestamp: Between(new Date(startDate), new Date(endDate)),
+        },
+      });
+    }
+    return await this.priceFetcherRepository.find()
+  } 
 
-  findOne(id: number) {
-    return `This action returns a #${id} priceFetcher`;
-  }
-
-  update(id: number, updatePriceFetcherDto: UpdatePriceFetcherDto) {
-    return `This action updates a #${id} priceFetcher`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} priceFetcher`;
+  async fetchCurrentPrice(): Promise<number>{
+    try {
+      const response: CoinDeskResponse = await axios.get('https://data-api.coindesk.com/spot/v1/latest/tick?market=coinbase&instruments=BTC-USD');
+      const price: number = response.data.Data['BTC-USD'].PRICE;
+      console.log(`Fetched current price: ${price}`);
+      return price;
+    } catch {
+      throw new Error('Failed to fetch current price');
+    }
   }
 }
