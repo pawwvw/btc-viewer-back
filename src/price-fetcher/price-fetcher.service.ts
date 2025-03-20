@@ -45,7 +45,6 @@ export class PriceFetcherService {
     try {
       const response: CoinDeskResponse = await axios.get('https://data-api.coindesk.com/spot/v1/latest/tick?market=coinbase&instruments=BTC-USD');
       const price: number = response.data.Data['BTC-USD'].PRICE;
-      console.log(`Fetched current price: ${price}`);
       return price;
     } catch {
       throw new Error('Failed to fetch current price');
